@@ -2,23 +2,15 @@
 
 ## Архитектура
 
-Postgres:
+Postgres: 
+* client-postgres — «витрина/хранилище»
 
-    client-postgres — «клиентская» БД с таблицами users и т.д.
+Airflow: 
+* DAG-и для загрузки данных и запуска dbt.
 
-    warehouse-postgres — «витрина/хранилище» при необходимости.
-
-Airflow:
-
-    webserver, scheduler, worker, Flower.
-
-    DAG-и для загрузки данных и запуска dbt.
-
-dbt:
-
-    отдельный контейнер с проектом в каталоге ./dbt_project.
-
-    запускается из Airflow через BashOperator.
+dbt: 
+* отдельный контейнер с проектом в каталоге ./dbt_project. 
+* запускается из Airflow через BashOperator.
 
 ## Запуск
 
@@ -27,26 +19,26 @@ dbt:
 
 1. Настроить .env с AIRFLOW_UID
 
-Для запуска Airflow нужен UID текущего пользователя, его надо записать в файл .env в корне репозитория.
-На Linux UID можно получить так: 
+    Для запуска Airflow нужен UID текущего пользователя, его надо записать в файл .env в корне репозитория.
+    На Linux UID можно получить так: 
 
-```sh
-id -u
-```
+    ```sh
+    id -u
+    ```
 
-Пример .env:
+    Пример .env:
 
-```text
-AIRFLOW_UID=1000
-```
-(подставь свой UID.)
+    ```text
+    AIRFLOW_UID=1000
+    ```
+    (подставь свой UID.)
 
 
 2. Поднять все сервисы
 
-```sh
-docker-compose up
-```
+    ```sh
+    docker-compose up
+    ```
 
 ### Веб интерфейсы
 
