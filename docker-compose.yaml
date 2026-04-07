@@ -33,7 +33,7 @@ x-airflow-common:
     _AIRFLOW_WWW_USER_PASSWORD: "airflow"
   volumes:
     - ./airflow/dags:/opt/airflow/dags
-    - ./airflow/logs:/opt/airflow/logs
+    - airflow-logs-volume:/opt/airflow/logs
     - ./airflow/plugins:/opt/airflow/plugins
     - ./dbt_project:/dbt
   user: "${AIRFLOW_UID:-50000}:0"
@@ -196,6 +196,7 @@ services:
  
 volumes:
   airflow-db-volume:
+  airflow-logs-volume:
   db_home:
 
 networks:
