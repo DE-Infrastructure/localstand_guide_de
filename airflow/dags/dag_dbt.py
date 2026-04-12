@@ -1,14 +1,7 @@
-import json
-from textwrap import dedent
 from airflow.operators.bash import BashOperator
-
 import pendulum
 
-# The DAG object; we'll need this to instantiate a DAG
 from airflow import DAG
-
-# Operators; we need this to operate!
-from airflow.operators.python import PythonOperator
 
 with DAG(
     "dag_dbt",
@@ -23,6 +16,6 @@ with DAG(
     dbt_debug = BashOperator(
         task_id="dbt_run",
         bash_command=(
-            "cd /dbt && export DBT_PROFILES_DIR=/dbt && dbt run --select stg_users dim_users"
+            "cd /dbt && export DBT_PROFILES_DIR=/dbt && dbt debug --connection"
         ),
     )
