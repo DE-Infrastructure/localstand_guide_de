@@ -1,12 +1,13 @@
-my_profile:               
+academy_dwh:
   target: dev
   outputs:
     dev:
-      type: postgres
-      host: client-postgres       
-      port: 5432
-      user: postgres
-      pass: postgres
-      dbname: postgres
-      schema: public   
-      threads: 4
+      type: greenplum
+      host: "{{ env_var('GP_HOST', 'greenplum') }}"
+      port: "{{ env_var('GP_PORT', '5432') | int }}"
+      user: "{{ env_var('GP_USER', 'gpadmin') }}"
+      pass: "{{ env_var('GP_PASSWORD', 'gpadmin') }}"
+      dbname: "{{ env_var('GP_DATABASE', 'dwh') }}"
+      schema: public
+      threads: 2
+      connect_timeout: 15

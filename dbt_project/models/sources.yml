@@ -1,0 +1,54 @@
+version: 2
+sources:
+  - name: academy_raw
+    schema: raw
+    description: "Текущий согласованный снимок Postgres; значения источника и метаданные загрузки."
+    tables:
+      - name: students
+        columns:
+          - name: student_id
+            tests: [not_null, unique]
+          - name: _batch_id
+            tests: [not_null]
+      - name: courses
+        columns:
+          - name: course_id
+            tests: [not_null, unique]
+          - name: _batch_id
+            tests: [not_null]
+      - name: orders
+        columns:
+          - name: order_id
+            tests: [not_null, unique]
+          - name: _batch_id
+            tests: [not_null]
+      - name: order_items
+        columns:
+          - name: order_item_id
+            tests: [not_null, unique]
+          - name: _batch_id
+            tests: [not_null]
+      - name: payments
+        columns:
+          - name: payment_id
+            tests: [not_null, unique]
+          - name: _batch_id
+            tests: [not_null]
+      - name: refunds
+        columns:
+          - name: refund_id
+            tests: [not_null, unique]
+          - name: _batch_id
+            tests: [not_null]
+      - name: enrollments
+        columns:
+          - name: enrollment_id
+            tests: [not_null, unique]
+          - name: _batch_id
+            tests: [not_null]
+      - name: lesson_events
+        columns:
+          - name: delivery_id
+            tests: [not_null, unique]
+          - name: _batch_id
+            tests: [not_null]

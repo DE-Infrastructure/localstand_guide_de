@@ -1,0 +1,125 @@
+version: 2
+models:
+  - name: stg_students
+    columns:
+      - name: student_id
+        tests:
+          - not_null
+          - unique
+  - name: stg_courses
+    columns:
+      - name: course_id
+        tests:
+          - not_null
+          - unique
+  - name: stg_orders
+    columns:
+      - name: order_id
+        tests:
+          - not_null
+          - unique
+      - name: student_id
+        tests:
+          - not_null
+          - relationships:
+              to: "ref('stg_students')"
+              field: 'student_id'
+      - name: status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['paid', 'pending', 'cancelled']
+  - name: stg_order_items
+    columns:
+      - name: order_item_id
+        tests:
+          - not_null
+          - unique
+      - name: order_id
+        tests:
+          - not_null
+          - relationships:
+              to: "ref('stg_orders')"
+              field: 'order_id'
+      - name: course_id
+        tests:
+          - not_null
+          - relationships:
+              to: "ref('stg_courses')"
+              field: 'course_id'
+  - name: stg_payments
+    columns:
+      - name: payment_id
+        tests:
+          - not_null
+          - unique
+      - name: order_id
+        tests:
+          - not_null
+          - relationships:
+              to: "ref('stg_orders')"
+              field: 'order_id'
+      - name: status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['succeeded', 'failed']
+  - name: stg_refunds
+    columns:
+      - name: refund_id
+        tests:
+          - not_null
+          - unique
+      - name: order_item_id
+        tests:
+          - not_null
+          - relationships:
+              to: "ref('stg_order_items')"
+              field: 'order_item_id'
+      - name: status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['processed', 'requested']
+  - name: dim_students
+    columns:
+      - name: student_id
+        tests:
+          - not_null
+          - unique
+  - name: dim_courses
+    columns:
+      - name: course_id
+        tests:
+          - not_null
+          - unique
+  - name: fct_orders
+    columns:
+      - name: order_id
+        tests:
+          - not_null
+          - unique
+      - name: student_id
+        tests:
+          - not_null
+          - relationships:
+              to: "ref('dim_students')"
+              field: 'student_id'
+  - name: fct_order_items
+    columns:
+      - name: order_item_id
+        tests:
+          - not_null
+          - unique
+      - name: student_id
+        tests:
+          - not_null
+          - relationships:
+              to: "ref('dim_students')"
+              field: 'student_id'
+      - name: course_id
+        tests:
+          - not_null
+          - relationships:
+              to: "ref('dim_courses')"
+              field: 'course_id'

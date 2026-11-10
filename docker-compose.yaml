@@ -1,203 +1,172 @@
-# AIRFLOW_IMAGE_NAME           - Docker image name used to run Airflow.
-#                                Default: apache/airflow:2.2.4
-# AIRFLOW_UID                  - User ID in Airflow containers
-#                                Default: 50000
-# Those configurations are useful mostly in case of standalone testing/running Airflow in test/try-out mode
-#
-# _AIRFLOW_WWW_USER_USERNAME   - Username for the administrator account (if requested).
-#                                Default: airflow
-# _AIRFLOW_WWW_USER_PASSWORD   - Password for the administrator account (if requested).
-#                                Default: airflow
-# _PIP_ADDITIONAL_REQUIREMENTS - Additional PIP requirements to add when starting all containers.
-#                                Default: ''
----
-version: '3'
-x-airflow-common:
-  &airflow-common
-  #image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.7.3}
+name: localstand-dwh
+
+x-airflow-common: &airflow-common
   build: .
-  environment:
-    &airflow-common-env
-    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
-    AIRFLOW__CORE__LOAD_DEFAULT_CONNECTIONS: 'false'
-    AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
-    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@airflow-postgres/airflow
-    AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
-    AIRFLOW__CORE__FERNET_KEY: ''
-    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
-    AIRFLOW__CORE__LOAD_EXAMPLES: 'true'
-    AIRFLOW__API__AUTH_BACKEND: 'airflow.api.auth.backend.basic_auth'
-    AIRFLOW__CORE__ENABLE_XCOM_PICKLING: 'true'
-    _AIRFLOW_WWW_USER_CREATE: "true"
-    _AIRFLOW_WWW_USER_USERNAME: "airflow"
-    _AIRFLOW_WWW_USER_PASSWORD: "airflow"
-  volumes:
-    - ./airflow/dags:/opt/airflow/dags
-    - airflow-logs-volume:/opt/airflow/logs
-    - ./airflow/plugins:/opt/airflow/plugins
-    - ./dbt_project:/dbt
+  image: localstand-airflow:2.10.5-dbt1.5
   user: "${AIRFLOW_UID:-50000}:0"
-  depends_on:
-    &airflow-common-depends-on
-    redis:
-      condition: service_healthy
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__ENABLE_XCOM_PICKLING: 'false'
+    AIRFLOW__CORE__PARALLELISM: '4'
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    AIRFLOW__WEBSERVER__WORKERS: '2'
+    AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT: '300'
+    AIRFLOW__WEBSERVER__WEB_SERVER_WORKER_TIMEOUT: '300'
+    AIRFLOW__WEBSERVER__SECRET_KEY: local-dwh-demo-only
+    AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
+    AIRFLOW_CONN_SOURCE_POSTGRES: postgresql://postgres:postgres@client-postgres:5432/postgres
+    AIRFLOW_CONN_GREENPLUM: postgresql://gpadmin:gpadmin@greenplum:5432/dwh
+    GP_HOST: greenplum
+    GP_PORT: '5432'
+    GP_USER: gpadmin
+    GP_PASSWORD: gpadmin
+    GP_DATABASE: dwh
+  volumes:
+    # Shared SELinux labels also allow these mounts on Fedora/RHEL hosts.
+    - ./airflow/dags:/opt/airflow/dags:ro,z
+    - ./dbt_project:/dbt:ro,z
+    - ./scripts:/opt/airflow/scripts:ro,z
+    - ./greenplum:/opt/airflow/greenplum:ro,z
+    - airflow-logs-volume:/opt/airflow/logs
+  depends_on: &airflow-depends-on
     airflow-postgres:
       condition: service_healthy
-
-x-superset-image: &superset-image apache/superset:1.4.1
-x-superset-depends-on: &superset-depends-on
-  - db
-  - redis
-x-superset-volumes: &superset-volumes
-  - ./superset/docker:/app/docker
-  - superset_home:/app/superset_home
-
+  networks: [backend]
 
 services:
   client-postgres:
-    image: postgres:13
-    container_name: client-postgres
+    profiles: [source, dwh]
+    image: postgres:16.6@sha256:557fea37a744d5f4c8faab304b0a90858b53ab119735a88c131fd19dab802f36
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: postgres
-    ports:
-      - "5051:5432"
+    ports: ["127.0.0.1:${SOURCE_PORT:-5051}:5432"]
     volumes:
-      - ./client-postgres-init:/docker-entrypoint-initdb.d
-    networks:
-    - backend
+      - source-db-volume:/var/lib/postgresql/data
+      - ./client-postgres-init:/docker-entrypoint-initdb.d:ro,z
+    healthcheck:
+      # TCP is unavailable during the image's temporary initialization server.
+      test: ["CMD-SHELL", "PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d postgres -tAc 'SELECT count(*) FROM academy.orders' >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+    networks: [backend]
+
+  greenplum:
+    profiles: [dwh]
+    image: woblerr/greenplum:6.27.1@sha256:f27652e7ecd5bdf21d4d10b54889e91abf37c7a24859ed8043d2782b3216a60e
+    hostname: greenplum
+    environment:
+      GREENPLUM_PASSWORD: gpadmin
+      GREENPLUM_DATABASE_NAME: dwh
+      GREENPLUM_DEPLOYMENT: singlenode
+      TZ: Etc/UTC
+    ports: ["127.0.0.1:${GREENPLUM_PORT:-5433}:5432"]
+    volumes:
+      - greenplum-data-volume:/data
+    shm_size: 1gb
+    stop_grace_period: 90s
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          bash -c 'source /usr/local/greenplum-db/greenplum_path.sh &&
+          PGPASSWORD=gpadmin psql -h greenplum -U gpadmin -d dwh -v ON_ERROR_STOP=1
+          -tAc "SELECT count(*) FROM gp_dist_random('\''pg_class'\'')" >/dev/null'
+      interval: 10s
+      timeout: 10s
+      start_period: 120s
+      retries: 30
+    restart: unless-stopped
+    networks: [backend]
 
   airflow-postgres:
-    image: postgres:13
-    container_name: airflow-postgres
+    image: postgres:16.6@sha256:557fea37a744d5f4c8faab304b0a90858b53ab119735a88c131fd19dab802f36
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
       POSTGRES_DB: airflow
     volumes:
-      - airflow-db-volume:/var/lib/postgresql/data
+      # PostgreSQL 13 data from the old Compose needs migration; use a fresh volume.
+      - airflow-db-v16-volume:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "airflow"]
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "airflow"]
       interval: 5s
-      retries: 5
+      timeout: 5s
+      retries: 20
     restart: unless-stopped
-    networks:
-    - backend
-
-  redis:
-    image: redis:latest
-    container_name: redis
-    expose:
-      - 6379
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 30s
-      retries: 50
-    restart: unless-stopped
-    networks:
-    - backend
+    networks: [backend]
 
   airflow-init:
-    container_name: airflow-init
     <<: *airflow-common
-    command: >
-      bash -c "airflow db init && airflow db migrate"
-    depends_on:
-      <<: *airflow-common-depends-on
-    restart: "no"
-    networks:
-      - backend
+    environment:
+      <<: *airflow-env
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: airflow
+      _AIRFLOW_WWW_USER_PASSWORD: airflow
+    command: version
+    restart: 'no'
 
   airflow-webserver:
-    container_name: airflow-webserver
     <<: *airflow-common
     command: webserver
-    ports:
-      - 8080:8080
+    ports: ["127.0.0.1:${AIRFLOW_PORT:-8080}:8080"]
+    depends_on:
+      <<: *airflow-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+      # A completed one-shot is also accounted for by compose up --wait.
+      dwh-init:
+        condition: service_completed_successfully
+        required: false
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 10s
       timeout: 10s
-      retries: 5
+      start_period: 30s
+      retries: 20
     restart: unless-stopped
-    depends_on:
-      <<: *airflow-common-depends-on
-    networks:
-    - backend
- 
+
   airflow-scheduler:
-    container_name: airflow-scheduler
     <<: *airflow-common
     command: scheduler
-    healthcheck:
-      test: ["CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"']
-      interval: 10s
-      timeout: 10s
-      retries: 5
-    restart: unless-stopped
     depends_on:
-      <<: *airflow-common-depends-on
-    networks:
-    - backend
+      <<: *airflow-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 15s
+      timeout: 10s
+      start_period: 30s
+      retries: 20
+    restart: unless-stopped
 
-  airflow-worker:
-    container_name: airflow-worker
+  dwh-init:
     <<: *airflow-common
-    command: celery worker
-    healthcheck:
-      test:
-        - "CMD-SHELL"
-        - 'celery --app airflow.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
-      interval: 10s
-      timeout: 10s
-      retries: 5
-    environment:
-      <<: *airflow-common-env
-      DUMB_INIT_SETSID: "0"
-    restart: unless-stopped
+    profiles: [dwh]
+    command: python /opt/airflow/scripts/enable_dwh.py
     depends_on:
-      <<: *airflow-common-depends-on
-    networks:
-    - backend
+      <<: *airflow-depends-on
+      airflow-scheduler:
+        condition: service_healthy
+      client-postgres:
+        condition: service_healthy
+      greenplum:
+        condition: service_healthy
+    restart: 'no'
 
-  airflow-triggerer:
-    container_name: airflow-triggerer
-    <<: *airflow-common
-    command: triggerer
-    healthcheck:
-      test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
-      interval: 10s
-      timeout: 10s
-      retries: 5
-    restart: unless-stopped
-    depends_on:
-      <<: *airflow-common-depends-on
-    networks:
-    - backend
-
-  flower:
-    container_name: flower
-    <<: *airflow-common
-    command: celery flower
-    ports:
-      - 5555:5555
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:5555/"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-    restart: unless-stopped
-    depends_on:
-      <<: *airflow-common-depends-on
-    networks:
-    - backend
- 
 volumes:
-  airflow-db-volume:
+  source-db-volume:
+  greenplum-data-volume:
+  airflow-db-v16-volume:
   airflow-logs-volume:
-  db_home:
 
 networks:
   backend:

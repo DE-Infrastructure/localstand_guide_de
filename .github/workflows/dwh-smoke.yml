@@ -1,0 +1,78 @@
+name: DWH smoke test
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  dwh:
+    name: DWH / ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate every Compose mode
+        run: |
+          docker compose config --quiet
+          docker compose --profile source config --quiet
+          docker compose --profile dwh config --quiet
+      - name: Start Airflow and dbt without source or warehouse
+        run: docker compose up --build --detach --wait --wait-timeout 600
+      - name: Check the base mode
+        run: |
+          test "$(docker compose --profile '*' ps --all --services | sort)" = "$(printf '%s\n' airflow-init airflow-postgres airflow-scheduler airflow-webserver | sort)"
+          docker compose exec -T airflow-scheduler /opt/dbt-venv/bin/dbt --version
+          docker compose exec -T airflow-scheduler python /opt/airflow/scripts/check_mode.py --mode base
+      - name: Enable the seeded source without Greenplum
+        run: docker compose --profile source up --detach --wait --wait-timeout 600
+      - name: Check the source mode
+        run: |
+          test "$(docker compose --profile '*' ps --all --services | sort)" = "$(printf '%s\n' airflow-init airflow-postgres airflow-scheduler airflow-webserver client-postgres | sort)"
+          test "$(docker compose exec -T client-postgres psql -U postgres -d postgres -tAc 'SELECT count(*) FROM academy.orders')" = "400"
+          docker compose exec -T airflow-scheduler python /opt/airflow/scripts/check_mode.py --mode source
+      - name: Enable the full DWH
+        run: docker compose --profile dwh up --detach --wait --wait-timeout 600
+      - name: Check full mode services and DWH activation
+        run: |
+          test "$(docker compose --profile dwh ps --all --services | sort)" = "$(printf '%s\n' airflow-init airflow-postgres airflow-scheduler airflow-webserver client-postgres dwh-init greenplum | sort)"
+          test "$(docker inspect --format '{{.State.Status}}/{{.State.ExitCode}}' "$(docker compose --profile dwh ps --all --quiet dwh-init)")" = "exited/0"
+      - name: Check the first dataset and repeated runs
+        run: docker compose exec -T airflow-scheduler python /opt/airflow/scripts/smoke_test.py
+      - name: Check rollback after a failed COPY
+        run: docker compose exec -T airflow-scheduler python /opt/airflow/scripts/check_rollback.py
+      - name: Apply the demo changes twice
+        run: |
+          docker compose exec -T client-postgres psql -U postgres -d postgres -v ON_ERROR_STOP=1 < scripts/demo_changes.sql
+          docker compose exec -T client-postgres psql -U postgres -d postgres -v ON_ERROR_STOP=1 < scripts/demo_changes.sql
+      - name: Check the changed dataset and repeated runs
+        run: docker compose exec -T airflow-scheduler python /opt/airflow/scripts/smoke_test.py --expected changed
+      - name: Recreate containers and check persistent data
+        run: |
+          docker compose --profile dwh down
+          docker compose --profile dwh up --detach --wait --wait-timeout 600
+          docker compose exec -T airflow-scheduler python /opt/airflow/scripts/smoke_test.py --expected changed
+      - name: Return to Airflow and dbt while preserving data
+        run: |
+          docker compose exec -T airflow-scheduler airflow dags pause academy_dwh
+          docker compose --profile dwh stop dwh-init greenplum client-postgres
+          docker compose up --detach --wait --wait-timeout 600
+          docker compose exec -T airflow-scheduler python /opt/airflow/scripts/check_mode.py --mode base --allow-existing-runs
+          test "$(docker compose --profile '*' ps --status running --services | sort)" = "$(printf '%s\n' airflow-postgres airflow-scheduler airflow-webserver | sort)"
+      - name: Collect logs
+        if: always()
+        run: |
+          mkdir -p artifacts
+          docker compose --profile '*' logs --no-color > artifacts/compose.log
+          docker compose cp airflow-scheduler:/opt/airflow/logs artifacts/airflow || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dwh-logs-${{ matrix.runner }}
+          path: artifacts
+      - name: Stop the lab
+        if: always()
+        run: docker compose --profile '*' down --volumes

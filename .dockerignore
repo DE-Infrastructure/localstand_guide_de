@@ -1,0 +1,11 @@
+.git
+.env
+.venv*
+**/__pycache__
+**/target
+**/logs
+**/dbt_packages
+docs
+examples
+tests
+artifacts

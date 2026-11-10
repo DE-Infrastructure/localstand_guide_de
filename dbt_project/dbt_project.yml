@@ -1,9 +1,19 @@
-name: 'my_dbt_project'        
+name: academy_dwh
 version: '1.0.0'
 config-version: 2
-
-profile: 'my_profile'         
-
-model-paths: ["models"]       
-target-path: "target"         
-clean-targets: ["target"]
+profile: academy_dwh
+model-paths: [models]
+test-paths: [tests]
+macro-paths: [macros]
+clean-targets: [target, dbt_packages]
+models:
+  academy_dwh:
+    staging:
+      +schema: staging
+      +materialized: view
+    core:
+      +schema: core
+      +materialized: table
+    marts:
+      +schema: marts
+      +materialized: table

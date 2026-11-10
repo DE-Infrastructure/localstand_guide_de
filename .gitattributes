@@ -1,0 +1,2 @@
+# Linux containers need LF even when Git for Windows uses core.autocrlf=true.
+* text=auto eol=lf

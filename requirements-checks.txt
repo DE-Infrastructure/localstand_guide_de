@@ -1,0 +1,6 @@
+-r requirements-dbt.txt
+-c constraints-dbt.txt
+duckdb==1.3.2
+pglast==7.2
+PyYAML==6.0.2
+numpy==1.26.4
