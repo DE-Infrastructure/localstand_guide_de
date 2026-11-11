@@ -67,12 +67,17 @@ jobs:
         run: |
           mkdir -p artifacts
           docker compose --profile '*' logs --no-color > artifacts/compose.log
-          docker compose cp airflow-scheduler:/opt/airflow/logs artifacts/airflow || true
+          if docker compose cp airflow-scheduler:/opt/airflow/logs artifacts/airflow; then
+            # Airflow run IDs contain colons, which artifact paths cannot contain.
+            tar -czf artifacts/airflow-logs.tar.gz -C artifacts airflow
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: dwh-logs-${{ matrix.runner }}
-          path: artifacts
+          path: |
+            artifacts/compose.log
+            artifacts/airflow-logs.tar.gz
       - name: Stop the lab
         if: always()
         run: docker compose --profile '*' down --volumes

@@ -162,6 +162,6 @@ docker compose --profile dwh up -d
 
 Настройка и перезапуск Colima записаны в `colima-repair.log`, `vm-restart.log` и `smoke-vm-restarted.log`. Папка `artifacts/` исключена также из Docker build context.
 
-В [.github/workflows/dwh-smoke.yml](../.github/workflows/dwh-smoke.yml) сохранены проверки для GitHub Actions, включая пересоздание контейнеров. На момент локальных проверок workflow на GitHub ещё не запускался. Для публикации стенда используется ветка `codex/greenplum-dwh`; текущий результат GitHub Actions нужно смотреть отдельно от этого отчёта.
+В [первом прогоне GitHub Actions](https://github.com/DE-Infrastructure/localstand_guide_de/actions/runs/42846754657) проверки стенда прошли на Linux amd64 и arm64, включая смену профилей, повторные загрузки, откат COPY и сохранение данных при пересоздании контейнеров. Сбой был при выгрузке логов: имена каталогов Airflow содержат двоеточия. Теперь [.github/workflows/dwh-smoke.yml](../.github/workflows/dwh-smoke.yml) загружает логи Airflow одним архивом `airflow-logs.tar.gz`, а лог Compose — отдельным файлом.
 
 До запуска Docker также прошли `dbt parse`, проверка зависимостей, `tests/check_models.py` на DuckDB, синтаксический разбор SQL и проверка намеренно ошибочной частичной оплаты. Основное подтверждение работы стенда — приведённые выше реальные контейнерные прогоны.

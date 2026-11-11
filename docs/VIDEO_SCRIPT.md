@@ -28,7 +28,7 @@ bash scripts/gp_sql.sh < docs/video_warehouse_queries.sql
 
 Сначала пройди сценарий целиком на своей ОС. Для съёмки установки используй отдельную учебную среду либо запиши реальные шаги первой установки. На уже настроенной машине показывай проверку версии и объясняй, что программа установлена. Рабочий Docker ради кадра переустанавливать не требуется.
 
-До записи клонирования проверь ветку `codex/greenplum-dwh` на GitHub: в ней должны быть `client-postgres-init/01_academy.sql`, `greenplum/01_raw.sql` и `airflow/dags/dag_academy_dwh.py`. В командах зрителя явно выбираем эту ветку через `--branch codex/greenplum-dwh`; `main` пока содержит прежнюю версию проекта.
+До записи проверь обычное клонирование репозитория с GitHub: в новой папке должны быть `client-postgres-init/01_academy.sql`, `greenplum/01_raw.sql` и `airflow/dags/dag_academy_dwh.py`.
 
 1. Выполни запуск из README и дождись результата проверки:
 
@@ -348,7 +348,7 @@ docker info
 ```bash
 mkdir -p ~/projects
 cd ~/projects
-git clone --branch codex/greenplum-dwh https://github.com/DE-Infrastructure/localstand_guide_de.git
+git clone https://github.com/DE-Infrastructure/localstand_guide_de.git
 cd localstand_guide_de
 pwd
 ls
@@ -1486,6 +1486,6 @@ docker compose --profile dwh stop dwh-init greenplum client-postgres
 - Пройти PG03–PG06 и GP08–GP13: заказ 308 и суммы должны совпасть со сценарием.
 - Убедиться, что глава про историчность показывает текущий снимок и SCD Type 1, без обещания хранения прежних raw-версий.
 - Указать, что MPP-кластер расположен на одной машине, а отказоустойчивость через зеркала не входит в пример.
-- Проверить доступность ветки `codex/greenplum-dwh` и использовать её в ссылке на репозиторий и команде clone для зрителя.
+- Проверить, что обычный `git clone` скачивает готовый стенд, и добавить ссылку на репозиторий в описание ролика.
 - Добавить ссылки на уже опубликованные видео об Airflow и dbt в описание ролика.
 - Если демонстрационный заказ уже применён, перед повторной записью осознанно вернуть исходный набор; после записи достаточно остановить контейнеры с сохранением томов.

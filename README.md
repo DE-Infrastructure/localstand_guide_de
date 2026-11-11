@@ -86,10 +86,8 @@ docker compose version
 
 ## 2. Клонирование и выбор сервисов
 
-Учебный стенд находится в ветке **`codex/greenplum-dwh`**. Команда ниже сразу выбирает её; в `main` пока находится прежняя версия проекта.
-
 ```bash
-git clone --branch codex/greenplum-dwh https://github.com/DE-Infrastructure/localstand_guide_de.git
+git clone https://github.com/DE-Infrastructure/localstand_guide_de.git
 cd localstand_guide_de
 ```
 
